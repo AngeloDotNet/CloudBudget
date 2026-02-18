@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path=".gitignore" />
+    <File Path="Directory.Build.props" />
+    <File Path="LICENSE" />
+    <File Path="README.md" />
+  </Folder>
+  <Project Path="src/CloudBudget.API/CloudBudget.API.csproj" Id="92225fe7-b39a-44ba-aa8b-855740e7b2a4" />
+</Solution>
