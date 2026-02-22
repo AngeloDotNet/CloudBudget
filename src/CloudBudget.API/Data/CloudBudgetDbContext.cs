@@ -1,12 +1,12 @@
 using CloudBudget.API.Data.Configurations;
 using CloudBudget.API.Entities;
+using CloudBudget.API.Entities.Interfaces;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace CloudBudget.API.Data;
 
-//public class CloudBudgetDbContext(DbContextOptions<CloudBudgetDbContext> options) : DbContext(options)
 public class CloudBudgetDbContext(DbContextOptions<CloudBudgetDbContext> options) : IdentityDbContext<ApplicationUser, ApplicationRole, Guid,
     IdentityUserClaim<Guid>, ApplicationUserRole, IdentityUserLogin<Guid>, IdentityRoleClaim<Guid>, IdentityUserToken<Guid>>(options)
 {
@@ -25,40 +25,35 @@ public class CloudBudgetDbContext(DbContextOptions<CloudBudgetDbContext> options
         modelBuilder.ApplyConfiguration(new ApplicationUserRoleConfiguration());
     }
 
-    // Override SaveChanges per timestamp e gestione DeletedAt
-    public override int SaveChanges() => SaveChangesAsync(default).GetAwaiter().GetResult();
+    public override int SaveChanges()
+            => SaveChangesAsync(default).GetAwaiter().GetResult();
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
 
-        foreach (var entry in ChangeTracker.Entries<BaseEntity>())
+        // Itera le entry che implementano IBaseEntity (indipendente dal tipo di Id)
+        foreach (var entry in ChangeTracker.Entries<IBaseEntity>())
         {
-            switch (entry.State)
+            var entity = entry.Entity;
+            if (entry.State == EntityState.Added)
             {
-                case EntityState.Added:
-                    entry.Entity.CreatedAt = now;
-                    entry.Entity.ModifiedAt = null;
+                entity.CreatedAt = now;
+                entity.ModifiedAt = null;
 
-                    if (entry.Entity.IsDeleted && entry.Entity.DeletedAt == null)
-                    {
-                        entry.Entity.DeletedAt = now;
-                    }
+                if (entity.IsDeleted && entity.DeletedAt == null)
+                {
+                    entity.DeletedAt = now;
+                }
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entity.ModifiedAt = now;
 
-                    break;
-
-                case EntityState.Modified:
-                    entry.Entity.ModifiedAt = now;
-
-                    // Se è stato marcato come soft-delete, imposta DeletedAt se non presente
-                    var isDeleted = entry.Property(nameof(BaseEntity.IsDeleted)).CurrentValue as bool?;
-
-                    if (isDeleted == true && entry.Entity.DeletedAt == null)
-                    {
-                        entry.Entity.DeletedAt = now;
-                    }
-
-                    break;
+                if (entity.IsDeleted && entity.DeletedAt == null)
+                {
+                    entity.DeletedAt = now;
+                }
             }
         }
 
