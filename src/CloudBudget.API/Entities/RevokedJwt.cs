@@ -1,5 +1,3 @@
-using BudgetApp.Models;
-
 namespace CloudBudget.API.Entities;
 
 // Persistiamo qui i JWT (jti) revocati in modo che il middleware possa negarli

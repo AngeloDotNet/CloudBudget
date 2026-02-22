@@ -1,17 +1,17 @@
+using CloudBudget.API.Entities.Interfaces;
+
 namespace CloudBudget.API.Entities;
 
-public abstract class BaseEntity
+// Entità base generica: Id tipizzato + campi di audit/soft-delete
+public abstract class BaseEntity<TId> : IBaseEntity
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
+    public TId Id { get; set; } = default!;
 
-    // Timestamp di creazione / modifica
     public DateTime CreatedAt { get; set; }
     public DateTime? ModifiedAt { get; set; }
 
-    // Soft-delete
     public bool IsDeleted { get; set; } = false;
     public DateTime? DeletedAt { get; set; }
 
-    // Concurrency token (opzionale ma consigliato)
     public byte[]? RowVersion { get; set; }
 }

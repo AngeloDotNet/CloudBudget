@@ -1,10 +1,8 @@
-using BudgetApp.Models;
-
 namespace CloudBudget.API.Entities;
 
-public class RefreshToken : BaseEntity<Guid>
+public class RefreshToken
 {
-    //public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid Id { get; set; } = Guid.NewGuid();
 
     // Token stringa (secure random)
     public string Token { get; set; } = null!;
@@ -15,7 +13,14 @@ public class RefreshToken : BaseEntity<Guid>
     // Proprietario del refresh token
     public Guid UserId { get; set; }
 
-    //public DateTime CreatedAt { get; set; }
+    // Identificativo del client/device (es. client-generated GUID o device id)
+    public string ClientId { get; set; } = null!;
+
+    // Info di contesto
+    public string? IpAddress { get; set; }
+    public string? UserAgent { get; set; }
+
+    public DateTime CreatedAt { get; set; }
     public DateTime ExpiresAt { get; set; }
 
     // Se revocato, l'istante di revoca
