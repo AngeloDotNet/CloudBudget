@@ -2,16 +2,15 @@ using AutoMapper;
 using CloudBudget.API.DTOs;
 using CloudBudget.API.Entities;
 
-namespace CloudBudget.API.Mapping
+namespace CloudBudget.API.Mapping;
+
+public class MappingProfile : Profile
 {
-    public class MappingProfile : Profile
+    public MappingProfile()
     {
-        public MappingProfile()
-        {
-            // Mappa solo le proprietà non-nulle dal DTO all'entità
-            CreateMap<ExpensePatchDto, Expense>()
-                .ForAllMembers(opt
-                    => opt.Condition((src, dest, srcMember) => srcMember != null));
-        }
+        // Mappa solo proprietà non-null (per PATCH DTO)
+        CreateMap<ExpensePatchDto, Expense>()
+            .ForAllMembers(opt
+                => opt.Condition((src, dest, srcMember) => srcMember != null));
     }
 }
