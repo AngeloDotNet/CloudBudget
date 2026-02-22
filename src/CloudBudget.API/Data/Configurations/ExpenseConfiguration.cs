@@ -16,7 +16,6 @@ public class ExpenseConfiguration : IEntityTypeConfiguration<Expense>
             .IsRequired()
             .HasMaxLength(500);
 
-        // Precisione per l'importo
         builder.Property(e => e.Amount)
             .HasPrecision(12, 2)
             .IsRequired();
@@ -28,10 +27,9 @@ public class ExpenseConfiguration : IEntityTypeConfiguration<Expense>
             .IsRowVersion()
             .IsConcurrencyToken();
 
-        // Query filter per soft-delete
+        // Global query filter per soft-delete
         builder.HasQueryFilter(e => !e.IsDeleted);
 
-        // Indice su date e categoria (esempio per report/filtri)
         builder.HasIndex(e => new { e.Date, e.CategoryId });
     }
 }
