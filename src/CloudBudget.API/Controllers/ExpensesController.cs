@@ -10,10 +10,42 @@ namespace CloudBudget.API.Controllers;
 [Route("api/expenses")]
 public class ExpensesController(IRepository<Expense, Guid> expenseRepo, IRepository<Category, Guid> categoryRepo, IMapper mapper) : ControllerBase
 {
+    [HttpGet]
+    public async Task<IActionResult> GetAllAsync()
+        => Ok(await expenseRepo.ListAsync());
 
-    // PATCH via DTO (AutoMapper applica solo campi non-null)
+    [HttpGet("{id:guid}")]
+    public async Task<IActionResult> GetAsync(Guid id)
+    {
+        var e = await expenseRepo.GetByIdAsync(id);
+        return e == null ? NotFound() : Ok(e);
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> CreateAsync([FromBody] Expense create, CancellationToken ct)
+    {
+        // semplice create - in produzione separare DTO di input
+        await expenseRepo.AddAsync(create, ct);
+        return CreatedAtAction(nameof(GetAsync), new { id = create.Id }, create);
+    }
+
+    [HttpPut("{id:guid}")]
+    public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] Expense update, CancellationToken ct)
+    {
+        var exists = await expenseRepo.ExistsAsync(id, ct);
+        if (!exists)
+        {
+            return NotFound();
+        }
+
+        update.Id = id;
+        await expenseRepo.UpdateAsync(update, ct);
+        return NoContent();
+    }
+
+    // PATCH tramite DTO + AutoMapper (map only non-null props)
     [HttpPatch("{id:guid}")]
-    public async Task<IActionResult> Patch(Guid id, [FromBody] ExpensePatchDto dto, CancellationToken ct)
+    public async Task<IActionResult> PatchAsync(Guid id, [FromBody] ExpensePatchDto dto, CancellationToken ct)
     {
         if (dto == null)
         {
@@ -26,7 +58,6 @@ public class ExpensesController(IRepository<Expense, Guid> expenseRepo, IReposit
             return NotFound();
         }
 
-        // Se CategoryId presente, verifica esistenza (esempio di validazione)
         if (dto.CategoryId.HasValue)
         {
             var exists = await categoryRepo.ExistsAsync(dto.CategoryId.Value, ct);
@@ -37,13 +68,17 @@ public class ExpensesController(IRepository<Expense, Guid> expenseRepo, IReposit
             }
         }
 
-        // Mappa (solo campi non-null, grazie al MappingProfile)
         mapper.Map(dto, entity);
 
-        // eventuale logica aggiuntiva (es. aggiornare ModifiedAt)
-        entity.ModifiedAt = DateTime.UtcNow;
-
+        // eventuale gestione ModifiedAt avviene in SaveChangesAsync del DbContext
         await expenseRepo.UpdateAsync(entity, ct);
+        return NoContent();
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> DeleteAsync(Guid id, CancellationToken ct)
+    {
+        await expenseRepo.SoftDeleteAsync(id, ct);
         return NoContent();
     }
 }
