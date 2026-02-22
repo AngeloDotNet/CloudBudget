@@ -1,4 +1,4 @@
-using BudgetApp.Models;
+using CloudBudget.API.Entities;
 
 namespace CloudBudget.API.Repositories.Interfaces;
 
