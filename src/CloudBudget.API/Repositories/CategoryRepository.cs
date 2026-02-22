@@ -24,7 +24,6 @@ public class CategoryRepository(CloudBudgetDbContext db) : EfRepository<Category
 
         var now = DateTime.UtcNow;
         category.IsDeleted = true;
-
         if (category.DeletedAt == null)
         {
             category.DeletedAt = now;
@@ -33,7 +32,6 @@ public class CategoryRepository(CloudBudgetDbContext db) : EfRepository<Category
         foreach (var e in category.Expenses)
         {
             e.IsDeleted = true;
-
             if (e.DeletedAt == null)
             {
                 e.DeletedAt = now;

@@ -1,5 +1,5 @@
-using BudgetApp.Models;
 using CloudBudget.API.Data;
+using CloudBudget.API.Entities;
 using CloudBudget.API.Repositories.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,9 +16,12 @@ public class EfRepository<TEntity, TId> : IRepository<TEntity, TId> where TEntit
         _set = _db.Set<TEntity>();
     }
 
-    public async Task<TEntity?> GetByIdAsync(TId id, CancellationToken ct = default) =>
-        // Assumiamo PK single guid; per entità con PK diverse adattare
-        await _set.FindAsync([id], ct);
+    public async Task<TEntity?> GetByIdAsync(TId id, CancellationToken ct = default)
+    {
+        // FindAsync accetta object[] keyValues
+        var vt = await _set.FindAsync([id], ct);
+        return vt;
+    }
 
     public async Task<IEnumerable<TEntity>> ListAsync(CancellationToken ct = default)
         => await _set.ToListAsync(ct);
@@ -38,24 +41,21 @@ public class EfRepository<TEntity, TId> : IRepository<TEntity, TId> where TEntit
     public async Task SoftDeleteAsync(TId id, CancellationToken ct = default)
     {
         var entity = await GetByIdAsync(id, ct);
-
         if (entity == null)
         {
             return;
         }
 
-        var isDeletedProp = entity.GetType().GetProperty("IsDeleted");
-
-        isDeletedProp?.SetValue(entity, true);
-        entity.GetType().GetProperty("DeletedAt")?.SetValue(entity, DateTime.UtcNow);
+        entity.IsDeleted = true;
+        if (entity.DeletedAt == null)
+        {
+            entity.DeletedAt = DateTime.UtcNow;
+        }
 
         _set.Update(entity);
         await _db.SaveChangesAsync(ct);
     }
 
     public async Task<bool> ExistsAsync(TId id, CancellationToken ct = default)
-    {
-        var ent = await GetByIdAsync(id, ct);
-        return ent != null;
-    }
+        => (await GetByIdAsync(id, ct)) != null;
 }
