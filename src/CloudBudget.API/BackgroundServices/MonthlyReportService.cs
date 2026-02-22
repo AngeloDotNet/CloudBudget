@@ -37,13 +37,8 @@ namespace CloudBudget.API.BackgroundServices
                     // recipients could be configured; for demo read from config? using single sample recipient here
                     var recipients = new[] { "utente@example.com" };
 
-                    await mailer.SendAsync(
-                        recipients,
-                        $"Report spese {reportMonth:yyyy-MM}",
-                        "In allegato il report mensile delle spese.",
-                        stream,
-                        fileName,
-                        stoppingToken);
+                    await mailer.SendAsync(recipients, $"Report spese {reportMonth:yyyy-MM}",
+                        "In allegato il report mensile delle spese.", stream, fileName, stoppingToken);
 
                     logger.LogInformation("Monthly report generated and sent for {Month}", reportMonth.ToString("yyyy-MM"));
                 }
