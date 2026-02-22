@@ -1,6 +1,6 @@
 namespace CloudBudget.API.Entities.Interfaces;
 
-// Interfaccia non-generic per poter iterare ChangeTracker.Entries<IBaseEntity>()
+// Interfaccia non-generic per gestire audit/soft-delete indipendentemente dal tipo della PK
 public interface IBaseEntity
 {
     DateTime CreatedAt { get; set; }
