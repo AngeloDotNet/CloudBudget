@@ -14,22 +14,24 @@ public class JwtTokenService(IOptions<JwtSettings> opts, UserManager<Application
 {
     private readonly JwtSettings settings = opts.Value;
 
-    public async Task<(string Token, DateTime ExpiresAtUtc)> GenerateTokenAsync(ApplicationUser user)
+    public async Task<(string Token, DateTime ExpiresAtUtc, string Jti)> GenerateTokenAsync(ApplicationUser user)
     {
         var expires = DateTime.UtcNow.AddMinutes(settings.ExpireMinutes);
+        var jti = Guid.NewGuid().ToString();
 
         var claims = new List<Claim>
-        {
-            new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-            new Claim(JwtRegisteredClaimNames.Email, user.Email ?? string.Empty),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            new Claim("uid", user.Id.ToString())
-        };
+            {
+                new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+                new Claim(JwtRegisteredClaimNames.Email, user.Email ?? string.Empty),
+                new Claim(JwtRegisteredClaimNames.Jti, jti),
+                new Claim("uid", user.Id.ToString())
+            };
 
         var roles = await userManager.GetRolesAsync(user);
         claims.AddRange(roles.Select(r => new Claim(ClaimTypes.Role, r)));
 
         var userClaims = await userManager.GetClaimsAsync(user);
+
         if (userClaims != null && userClaims.Any())
         {
             claims.AddRange(userClaims);
@@ -47,6 +49,6 @@ public class JwtTokenService(IOptions<JwtSettings> opts, UserManager<Application
             signingCredentials: creds);
 
         var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
-        return (tokenString, expires);
+        return (tokenString, expires, jti);
     }
 }
