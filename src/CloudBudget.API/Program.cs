@@ -35,9 +35,7 @@ public class Program
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen();
 
-        //builder.Services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
         builder.Services.AddAutoMapper(typeof(MappingProfile));
-
         builder.Services.AddDbContext<CloudBudgetDbContext>(options =>
         {
             var sqlConnection = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -51,6 +49,7 @@ public class Program
         });
 
         builder.Services.AddScoped(typeof(IRepository<,>), typeof(EfRepository<,>));
+        builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
 
         builder.Services.AddSingleton<IEmailSender, MailKitEmailSender>();
 
@@ -60,7 +59,6 @@ public class Program
         builder.Services.AddTransient<IJwtTokenService, JwtTokenService>();
         builder.Services.AddTransient<IRefreshTokenService, RefreshTokenService>();
 
-        //builder.Services.AddTransient<IGeoIpService, HttpGeoIpService>();
         builder.Services.AddHttpClient<IGeoIpService, HttpGeoIpService>();
         builder.Services.AddTransient<IGeoIpService, NoOpGeoIpService>();
 
