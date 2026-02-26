@@ -6,9 +6,10 @@ public interface IRefreshTokenService
 {
     /// <summary>
     /// Crea un nuovo refresh token persistente collegato allo userId e al jwtId (jti),
-    /// con contestualizzazione clientId, ip e userAgent. Implementa sliding-window: disabilita i token precedenti per lo stesso user+client.
+    /// con contestualizzazione clientId, ip, userAgent e country.
+    /// Implementa sliding-window: disabilita i token precedenti per lo stesso user+client.
     /// </summary>
-    Task<RefreshToken> CreateRefreshTokenAsync(Guid userId, string jwtId, string clientId, string? ipAddress, string? userAgent, CancellationToken ct = default);
+    Task<RefreshToken> CreateRefreshTokenAsync(Guid userId, string jwtId, string clientId, string? ipAddress, string? userAgent, string? country, CancellationToken ct = default);
 
     Task<RefreshToken?> GetByTokenAsync(string token, CancellationToken ct = default);
 
