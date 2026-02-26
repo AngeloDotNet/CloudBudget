@@ -2,9 +2,14 @@ namespace CloudBudget.API.Entities;
 
 public class Category : BaseEntity<Guid>
 {
-    // opzione: generare l'id lato client
-    public Category() => Id = Guid.NewGuid();
+    public Category()
+    {
+        // genera Id lato application; se preferisci DB-generated, rimuovi questa riga
+        Id = Guid.NewGuid();
+    }
 
     public string Name { get; set; } = null!;
-    public ICollection<Expense> Expenses { get; set; } = [];
+
+    // Navigation: one -> many
+    public ICollection<Expense> Expenses { get; set; } = new List<Expense>();
 }
