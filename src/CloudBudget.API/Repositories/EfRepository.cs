@@ -5,7 +5,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CloudBudget.API.Repositories;
 
-public class EfRepository<TEntity, TId> : IRepository<TEntity, TId> where TEntity : BaseEntity<TId>
+public class EfRepository<TEntity, TId> : IRepository<TEntity, TId>
+        where TEntity : BaseEntity<TId>
 {
     protected readonly CloudBudgetDbContext _db;
     protected readonly DbSet<TEntity> _set;
@@ -18,9 +19,7 @@ public class EfRepository<TEntity, TId> : IRepository<TEntity, TId> where TEntit
 
     public async Task<TEntity?> GetByIdAsync(TId id, CancellationToken ct = default)
     {
-        // FindAsync accetta object[] keyValues
-        var vt = await _set.FindAsync([id], ct);
-        return vt;
+        return await _set.FindAsync(new object[] { id }, ct);
     }
 
     public async Task<IEnumerable<TEntity>> ListAsync(CancellationToken ct = default)
@@ -35,6 +34,7 @@ public class EfRepository<TEntity, TId> : IRepository<TEntity, TId> where TEntit
     public async Task UpdateAsync(TEntity entity, CancellationToken ct = default)
     {
         _set.Update(entity);
+        // Non catturo DbUpdateConcurrencyException qui: lo gestisco a livello superiore (controller/service)
         await _db.SaveChangesAsync(ct);
     }
 
