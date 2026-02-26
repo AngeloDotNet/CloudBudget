@@ -9,10 +9,14 @@ namespace CloudBudget.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class AuthController(SignInManager<ApplicationUser> signInManager, UserManager<ApplicationUser> userManager, IJwtTokenService jwt, IRefreshTokenService refreshService) : ControllerBase
+public class AuthController(
+    SignInManager<ApplicationUser> signInManager,
+    UserManager<ApplicationUser> userManager,
+    IJwtTokenService jwt,
+    IRefreshTokenService refreshService) : ControllerBase
 {
     [HttpPost("login")]
-    public async Task<IActionResult> LoginAsync([FromBody] LoginRequestDto dto)
+    public async Task<IActionResult> Login([FromBody] LoginRequestDto dto)
     {
         if (!ModelState.IsValid)
         {
@@ -33,12 +37,14 @@ public class AuthController(SignInManager<ApplicationUser> signInManager, UserMa
 
         var (token, expires, jti) = await jwt.GenerateTokenAsync(user);
 
-        // Extract client information from request
-        var clientId = HttpContext.Request.Headers["X-Client-Id"].FirstOrDefault() ?? "web";
-        var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
-        var userAgent = HttpContext.Request.Headers.UserAgent.FirstOrDefault();
+        // clientId: use provided, otherwise generate one for session (but better client generates)
+        var clientId = string.IsNullOrEmpty(dto.ClientId) ? Guid.NewGuid().ToString() : dto.ClientId;
 
-        var refresh = await refreshService.CreateRefreshTokenAsync(user.Id, jti, clientId, ipAddress, userAgent);
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var ua = HttpContext.Request.Headers["User-Agent"].ToString();
+        var country = HttpContext.Request.Headers["CF-IPCountry"].ToString(); // Cloudflare header, optional
+
+        var refresh = await refreshService.CreateRefreshTokenAsync(user.Id, jti, clientId, ip, ua, country);
 
         var resp = new LoginResponseDto
         {
@@ -51,9 +57,6 @@ public class AuthController(SignInManager<ApplicationUser> signInManager, UserMa
         return Ok(resp);
     }
 
-    /// <summary>
-    /// Refresh token endpoint: scambia refresh token per nuovo JWT + nuovo refresh token (rotazione)
-    /// </summary>
     [HttpPost("refresh")]
     public async Task<IActionResult> Refresh([FromBody] RefreshRequestDto dto)
     {
@@ -73,6 +76,12 @@ public class AuthController(SignInManager<ApplicationUser> signInManager, UserMa
             return Unauthorized(new { message = "Refresh token scaduto o revocato." });
         }
 
+        // ClientId check (sliding-window requires same client)
+        if (!string.IsNullOrEmpty(dto.ClientId) && !string.Equals(dto.ClientId, stored.ClientId, StringComparison.Ordinal))
+        {
+            return Unauthorized(new { message = "ClientId mismatch." });
+        }
+
         // recupera user
         var user = await userManager.FindByIdAsync(stored.UserId.ToString());
         if (user == null)
@@ -80,20 +89,15 @@ public class AuthController(SignInManager<ApplicationUser> signInManager, UserMa
             return Unauthorized();
         }
 
-        // revoca il refresh token corrente e crea uno nuovo (rotation)
+        // revoke current (rotation) and associated jwt jti, generate new jwt + refresh
         await refreshService.RevokeRefreshTokenAsync(stored.Token, replacedBy: null);
-        // anche revoca il jwt associato (per sicurezza)
         await refreshService.RevokeJwtAsync(stored.JwtId, "Rotated by refresh");
 
-        // genera nuovo JWT + refresh
         var (newToken, newExpires, newJti) = await jwt.GenerateTokenAsync(user);
+        var newRefresh = await refreshService.CreateRefreshTokenAsync(user.Id, newJti, stored.ClientId, stored.IpAddress, stored.UserAgent, stored.Country);
 
-        // Extract client information from request
-        var clientId = HttpContext.Request.Headers["X-Client-Id"].FirstOrDefault() ?? "web";
-        var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
-        var userAgent = HttpContext.Request.Headers.UserAgent.FirstOrDefault();
-
-        var newRefresh = await refreshService.CreateRefreshTokenAsync(user.Id, newJti, clientId, ipAddress, userAgent);
+        // mark replacedBy for the previous token
+        await refreshService.RevokeRefreshTokenAsync(stored.Token, replacedBy: newRefresh.Token);
 
         var resp = new LoginResponseDto
         {
@@ -103,39 +107,27 @@ public class AuthController(SignInManager<ApplicationUser> signInManager, UserMa
             RefreshTokenExpiresAtUtc = newRefresh.ExpiresAt
         };
 
-        // segna replacedBy per record precedente
-        await refreshService.RevokeRefreshTokenAsync(stored.Token, replacedBy: newRefresh.Token);
-
         return Ok(resp);
     }
 
-    /// <summary>
-    /// Logout: revoca tutti i refresh token dell'utente e aggiunge jti del JWT corrente al revocation store
-    /// </summary>
     [Authorize]
     [HttpPost("logout")]
-    public async Task<IActionResult> LogoutAsync()
+    public async Task<IActionResult> Logout()
     {
-        // ottieni user id dalla claim
         var uidClaim = User.FindFirst("uid")?.Value ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-
         if (!Guid.TryParse(uidClaim, out var uid))
         {
             return Forbid();
         }
 
-        // revoca tutti i refresh token dell'utente
         await refreshService.RevokeAllForUserAsync(uid);
 
-        // dettaglio: revoca anche jti del JWT corrente (se presente)
         var jti = User.FindFirst("jti")?.Value ?? User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value;
-
         if (!string.IsNullOrEmpty(jti))
         {
             await refreshService.RevokeJwtAsync(jti, "User logout");
         }
 
-        // per cookie-based signout
         await signInManager.SignOutAsync();
 
         return NoContent();

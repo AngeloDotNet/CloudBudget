@@ -3,6 +3,7 @@ using CloudBudget.API.DTOs;
 using CloudBudget.API.Entities;
 using CloudBudget.API.Repositories.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace CloudBudget.API.Controllers;
 
@@ -11,27 +12,36 @@ namespace CloudBudget.API.Controllers;
 public class ExpensesController(IRepository<Expense, Guid> expenseRepo, IRepository<Category, Guid> categoryRepo, IMapper mapper) : ControllerBase
 {
     [HttpGet]
-    public async Task<IActionResult> GetAllAsync()
-        => Ok(await expenseRepo.ListAsync());
+    public async Task<IActionResult> GetAll()
+            => Ok(await expenseRepo.ListAsync());
 
     [HttpGet("{id:guid}")]
-    public async Task<IActionResult> GetAsync(Guid id)
+    public async Task<IActionResult> Get(Guid id)
     {
         var e = await expenseRepo.GetByIdAsync(id);
         return e == null ? NotFound() : Ok(e);
     }
 
     [HttpPost]
-    public async Task<IActionResult> CreateAsync([FromBody] Expense create, CancellationToken ct)
+    public async Task<IActionResult> Create([FromBody] Expense create, CancellationToken ct)
     {
-        // semplice create - in produzione separare DTO di input
+        if (create == null)
+        {
+            return BadRequest();
+        }
+
         await expenseRepo.AddAsync(create, ct);
-        return CreatedAtAction(nameof(GetAsync), new { id = create.Id }, create);
+        return CreatedAtAction(nameof(Get), new { id = create.Id }, create);
     }
 
     [HttpPut("{id:guid}")]
-    public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] Expense update, CancellationToken ct)
+    public async Task<IActionResult> Update(Guid id, [FromBody] Expense update, CancellationToken ct)
     {
+        if (update == null)
+        {
+            return BadRequest();
+        }
+
         var exists = await expenseRepo.ExistsAsync(id, ct);
         if (!exists)
         {
@@ -39,13 +49,22 @@ public class ExpensesController(IRepository<Expense, Guid> expenseRepo, IReposit
         }
 
         update.Id = id;
-        await expenseRepo.UpdateAsync(update, ct);
-        return NoContent();
+
+        try
+        {
+            await expenseRepo.UpdateAsync(update, ct);
+            return NoContent();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Conflitto di concorrenza: restituire 409 con info minima
+            return Conflict(new { message = "Concurrency conflict: the resource was modified by another process. Reload and retry." });
+        }
     }
 
     // PATCH tramite DTO + AutoMapper (map only non-null props)
     [HttpPatch("{id:guid}")]
-    public async Task<IActionResult> PatchAsync(Guid id, [FromBody] ExpensePatchDto dto, CancellationToken ct)
+    public async Task<IActionResult> Patch(Guid id, [FromBody] ExpensePatchDto dto, CancellationToken ct)
     {
         if (dto == null)
         {
@@ -70,13 +89,19 @@ public class ExpensesController(IRepository<Expense, Guid> expenseRepo, IReposit
 
         mapper.Map(dto, entity);
 
-        // eventuale gestione ModifiedAt avviene in SaveChangesAsync del DbContext
-        await expenseRepo.UpdateAsync(entity, ct);
-        return NoContent();
+        try
+        {
+            await expenseRepo.UpdateAsync(entity, ct);
+            return NoContent();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict(new { message = "Concurrency conflict: the resource was modified by another process. Reload and retry." });
+        }
     }
 
     [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> DeleteAsync(Guid id, CancellationToken ct)
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
         await expenseRepo.SoftDeleteAsync(id, ct);
         return NoContent();
