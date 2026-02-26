@@ -10,9 +10,9 @@ public class RefreshTokenService(CloudBudgetDbContext db) : IRefreshTokenService
 {
     private readonly TimeSpan refreshTtl = TimeSpan.FromDays(30);
 
-    public async Task<RefreshToken> CreateRefreshTokenAsync(Guid userId, string jwtId, string clientId, string? ipAddress, string? userAgent, CancellationToken ct = default)
+    public async Task<RefreshToken> CreateRefreshTokenAsync(Guid userId, string jwtId, string clientId, string? ipAddress, string? userAgent, string? country, CancellationToken ct = default)
     {
-        // Sliding window: revoke previous active tokens for same user+clientId
+        // Sliding window revoke previous tokens for same user+client
         var previousActive = await db.RefreshTokens
             .Where(r => r.UserId == userId && r.ClientId == clientId && r.RevokedAt == null && r.ExpiresAt > DateTime.UtcNow)
             .ToListAsync(ct);
@@ -20,7 +20,7 @@ public class RefreshTokenService(CloudBudgetDbContext db) : IRefreshTokenService
         foreach (var p in previousActive)
         {
             p.RevokedAt = DateTime.UtcNow;
-            p.ReplacedByToken = null; // will be set below if needed
+            p.ReplacedByToken = null;
         }
 
         var tokenBytes = RandomNumberGenerator.GetBytes(64);
@@ -40,8 +40,9 @@ public class RefreshTokenService(CloudBudgetDbContext db) : IRefreshTokenService
             RevokedAt = null,
         };
 
+        // NOTA: Country sarà impostato da chiamante (AuthController) usando IGeoIpService lookup
         await db.RefreshTokens.AddAsync(rt, ct);
-        // mark replacedBy for previous tokens to this new token
+
         foreach (var p in previousActive)
         {
             p.ReplacedByToken = rt.Token;
