@@ -10,7 +10,6 @@ public class MappingProfile : Profile
     {
         // Mappa solo proprietà non-null (per PATCH DTO)
         CreateMap<ExpensePatchDto, Expense>()
-            .ForAllMembers(opt
-                => opt.Condition((src, dest, srcMember) => srcMember != null));
+            .ForAllMembers(opt => opt.Condition((src, dest, srcMember) => srcMember != null));
     }
 }
