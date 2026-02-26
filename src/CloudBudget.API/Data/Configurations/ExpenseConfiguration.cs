@@ -27,7 +27,6 @@ public class ExpenseConfiguration : IEntityTypeConfiguration<Expense>
             .IsRowVersion()
             .IsConcurrencyToken();
 
-        // Global query filter per soft-delete
         builder.HasQueryFilter(e => !e.IsDeleted);
 
         builder.HasIndex(e => new { e.Date, e.CategoryId });
