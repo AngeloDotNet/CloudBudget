@@ -11,7 +11,6 @@ public class Expense : BaseEntity<Guid>
     public decimal Amount { get; set; }
     public DateTime Date { get; set; }
 
-    // FK + navigation
     public Guid CategoryId { get; set; }
     public Category Category { get; set; } = null!;
 }
