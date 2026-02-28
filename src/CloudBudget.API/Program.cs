@@ -69,10 +69,10 @@ public class Program
             .AddEntityFrameworkStores<CloudBudgetDbContext>()
             .AddDefaultTokenProviders();
 
-        builder.Services.Configure<GeoIpSettings>(builder.Configuration.GetSection("GeoIpSettings"));
-        builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
-        builder.Services.Configure<ReportSettings>(builder.Configuration.GetSection("ReportSettings"));
-        builder.Services.Configure<SmtpSettings>(builder.Configuration.GetSection("SmtpSettings"));
+        builder.Services.Configure<GeoIpSettings>(builder.Configuration.GetSection("GeoIp"));
+        builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
+        builder.Services.Configure<ReportSettings>(builder.Configuration.GetSection("Report"));
+        builder.Services.Configure<SmtpSettings>(builder.Configuration.GetSection("Smtp"));
 
         var app = builder.Build();
 
