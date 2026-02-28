@@ -23,41 +23,60 @@ public class ExpensesController(IRepository<Expense, Guid> expenseRepo, IReposit
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] Expense create, CancellationToken ct)
+    public async Task<IActionResult> Create([FromBody] CreateExpenseDto dto, CancellationToken ct)
     {
-        if (create == null)
+        if (!ModelState.IsValid)
         {
-            return BadRequest();
+            return ValidationProblem(ModelState);
         }
 
-        await expenseRepo.AddAsync(create, ct);
-        return CreatedAtAction(nameof(Get), new { id = create.Id }, create);
+        // Validate category existence
+        var catExists = await categoryRepo.ExistsAsync(dto.CategoryId, ct);
+
+        if (!catExists)
+        {
+            ModelState.AddModelError(nameof(dto.CategoryId), "Categoria non trovata");
+            return ValidationProblem(ModelState);
+        }
+
+        var entity = mapper.Map<Expense>(dto);
+        entity.Id = Guid.NewGuid();
+
+        await expenseRepo.AddAsync(entity, ct);
+        return CreatedAtAction(nameof(Get), new { id = entity.Id }, entity);
     }
 
     [HttpPut("{id:guid}")]
-    public async Task<IActionResult> Update(Guid id, [FromBody] Expense update, CancellationToken ct)
+    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateExpenseDto dto, CancellationToken ct)
     {
-        if (update == null)
+        if (!ModelState.IsValid)
         {
-            return BadRequest();
+            return ValidationProblem(ModelState);
         }
 
-        var exists = await expenseRepo.ExistsAsync(id, ct);
-        if (!exists)
+        var existing = await expenseRepo.GetByIdAsync(id, ct);
+        if (existing == null)
         {
             return NotFound();
         }
 
-        update.Id = id;
+        // Validate category
+        var catExists = await categoryRepo.ExistsAsync(dto.CategoryId, ct);
+        if (!catExists)
+        {
+            ModelState.AddModelError(nameof(dto.CategoryId), "Categoria non trovata");
+            return ValidationProblem(ModelState);
+        }
+
+        mapper.Map(dto, existing);
 
         try
         {
-            await expenseRepo.UpdateAsync(update, ct);
+            await expenseRepo.UpdateAsync(existing, ct);
             return NoContent();
         }
         catch (DbUpdateConcurrencyException)
         {
-            // Conflitto di concorrenza: restituire 409 con info minima
             return Conflict(new { message = "Concurrency conflict: the resource was modified by another process. Reload and retry." });
         }
     }
