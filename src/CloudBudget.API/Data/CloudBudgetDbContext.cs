@@ -32,28 +32,22 @@ public class CloudBudgetDbContext(DbContextOptions<CloudBudgetDbContext> options
     {
         var now = DateTime.UtcNow;
 
-        // Itera le entry che implementano IBaseEntity (indipendente dal tipo di Id)
         foreach (var entry in ChangeTracker.Entries<IBaseEntity>())
         {
             var entity = entry.Entity;
+
             if (entry.State == EntityState.Added)
             {
                 entity.CreatedAt = now;
                 entity.ModifiedAt = null;
-
                 if (entity.IsDeleted && entity.DeletedAt == null)
-                {
                     entity.DeletedAt = now;
-                }
             }
             else if (entry.State == EntityState.Modified)
             {
                 entity.ModifiedAt = now;
-
                 if (entity.IsDeleted && entity.DeletedAt == null)
-                {
                     entity.DeletedAt = now;
-                }
             }
         }
 
