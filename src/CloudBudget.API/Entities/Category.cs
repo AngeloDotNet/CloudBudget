@@ -9,5 +9,5 @@ public class Category : BaseEntity<Guid>
 
     public string Name { get; set; } = null!;
 
-    public ICollection<Expense> Expenses { get; set; } = new List<Expense>();
+    public ICollection<Expense> Expenses { get; set; } = [];
 }
