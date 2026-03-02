@@ -15,7 +15,7 @@ public class AuthController(SignInManager<ApplicationUser> signInManager, UserMa
     IRefreshTokenService refreshService, IGeoIpService geoIp, CloudBudgetDbContext dbContext) : ControllerBase
 {
     [HttpPost("login")]
-    public async Task<IActionResult> Login([FromBody] LoginRequestDto dto)
+    public async Task<IActionResult> Login([FromBody] LoginRequestDto dto, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
         {
@@ -40,20 +40,12 @@ public class AuthController(SignInManager<ApplicationUser> signInManager, UserMa
         var clientId = string.IsNullOrEmpty(dto.ClientId) ? Guid.NewGuid().ToString() : dto.ClientId;
 
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-        var ua = HttpContext.Request.Headers["User-Agent"].ToString();
-        var country = HttpContext.Request.Headers["CF-IPCountry"].ToString(); // Cloudflare header, optional
+        var ua = HttpContext.Request.Headers.UserAgent.ToString();
 
-        var geo = await geoIp.LookupAsync(ip ?? "", CancellationToken.None);
-        var refresh = await refreshService.CreateRefreshTokenAsync(user.Id, jti, clientId, ip, ua, country);
-        //var refresh = await refreshService.CreateRefreshTokenAsync(user.Id, jti, clientId, ip, ua, country);
+        var geo = await geoIp.LookupAsync(ip ?? "", cancellationToken);
+        var country = geo?.CountryCode;
 
-        if (geo?.CountryCode != null)
-        {
-            refresh.Country = geo.CountryCode;
-            dbContext.RefreshTokens.Update(refresh);
-            await dbContext.SaveChangesAsync();
-        }
-
+        var refresh = await refreshService.CreateRefreshTokenAsync(user.Id, jti, clientId, ip, ua, country, cancellationToken);
         var resp = new LoginResponseDto
         {
             Token = token,
@@ -67,14 +59,15 @@ public class AuthController(SignInManager<ApplicationUser> signInManager, UserMa
 
     [HttpPost("refresh")]
     [EnableRateLimiting("RefreshPolicy")]
-    public async Task<IActionResult> Refresh([FromBody] RefreshRequestDto dto)
+    public async Task<IActionResult> Refresh([FromBody] RefreshRequestDto dto, CancellationToken cancellationToken)
     {
         if (dto == null || string.IsNullOrEmpty(dto.RefreshToken))
         {
             return BadRequest();
         }
 
-        var stored = await refreshService.GetByTokenAsync(dto.RefreshToken);
+        var stored = await refreshService.GetByTokenAsync(dto.RefreshToken, cancellationToken);
+
         if (stored == null)
         {
             return Unauthorized(new { message = "Refresh token non valido." });
@@ -91,6 +84,16 @@ public class AuthController(SignInManager<ApplicationUser> signInManager, UserMa
             return Unauthorized(new { message = "ClientId mismatch." });
         }
 
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var geo = await geoIp.LookupAsync(ip ?? "", cancellationToken);
+
+        // Geo check: if stored country exists and current lookup exists and mismatch -> deny
+        if (!string.IsNullOrEmpty(stored.Country) && !string.IsNullOrEmpty(geo?.CountryCode) &&
+            !string.Equals(stored.Country, geo.CountryCode, StringComparison.OrdinalIgnoreCase))
+        {
+            return Unauthorized(new { message = "Location mismatch for refresh token. Verify or use same device." });
+        }
+
         // recupera user
         var user = await userManager.FindByIdAsync(stored.UserId.ToString());
         if (user == null)
@@ -98,27 +101,15 @@ public class AuthController(SignInManager<ApplicationUser> signInManager, UserMa
             return Unauthorized();
         }
 
-        var clientId = dto.ClientId;
-        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-
-        // Geo lookup
-        var geo = await geoIp.LookupAsync(ip ?? "", CancellationToken.None);
-
-        // Controllo: se token salvato ha Country e geo non corrisponde -> negare
-        if (!string.IsNullOrEmpty(stored.Country) && !string.IsNullOrEmpty(geo?.CountryCode) && !string.Equals(stored.Country, geo.CountryCode, StringComparison.OrdinalIgnoreCase))
-        {
-            return Unauthorized(new { message = "Location mismatch for refresh token. Verify or use same device." });
-        }
-
         // revoke current (rotation) and associated jwt jti, generate new jwt + refresh
-        await refreshService.RevokeRefreshTokenAsync(stored.Token, replacedBy: null);
-        await refreshService.RevokeJwtAsync(stored.JwtId, "Rotated by refresh");
+        await refreshService.RevokeRefreshTokenAsync(stored.Token, replacedBy: null, ct: cancellationToken);
+        await refreshService.RevokeJwtAsync(stored.JwtId, "Rotated by refresh", cancellationToken);
 
         var (newToken, newExpires, newJti) = await jwt.GenerateTokenAsync(user);
         var newRefresh = await refreshService.CreateRefreshTokenAsync(user.Id, newJti, stored.ClientId, stored.IpAddress, stored.UserAgent, stored.Country);
 
         // mark replacedBy for the previous token
-        await refreshService.RevokeRefreshTokenAsync(stored.Token, replacedBy: newRefresh.Token);
+        await refreshService.RevokeRefreshTokenAsync(stored.Token, replacedBy: newRefresh.Token, ct: cancellationToken);
 
         var resp = new LoginResponseDto
         {
@@ -150,7 +141,6 @@ public class AuthController(SignInManager<ApplicationUser> signInManager, UserMa
         }
 
         await signInManager.SignOutAsync();
-
         return NoContent();
     }
 }
