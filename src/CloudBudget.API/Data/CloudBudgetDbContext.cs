@@ -7,8 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CloudBudget.API.Data;
 
-public class CloudBudgetDbContext(DbContextOptions<CloudBudgetDbContext> options) : IdentityDbContext<ApplicationUser, ApplicationRole, Guid,
-    IdentityUserClaim<Guid>, ApplicationUserRole, IdentityUserLogin<Guid>, IdentityRoleClaim<Guid>, IdentityUserToken<Guid>>(options)
+public class CloudBudgetDbContext(DbContextOptions<CloudBudgetDbContext> options) : IdentityDbContext<ApplicationUser, IdentityRole<Guid>, Guid>(options)
 {
     public DbSet<Category> Categories { get; set; }
     public DbSet<Expense> Expenses { get; set; }
