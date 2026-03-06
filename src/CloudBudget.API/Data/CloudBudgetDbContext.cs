@@ -11,6 +11,8 @@ public class CloudBudgetDbContext(DbContextOptions<CloudBudgetDbContext> options
 {
     public DbSet<Category> Categories { get; set; }
     public DbSet<Expense> Expenses { get; set; }
+
+    // Refresh tokens + revoked JWTs
     public DbSet<RefreshToken> RefreshTokens { get; set; }
     public DbSet<RevokedJwt> RevokedJwts { get; set; }
 
@@ -22,6 +24,22 @@ public class CloudBudgetDbContext(DbContextOptions<CloudBudgetDbContext> options
         modelBuilder.ApplyConfiguration(new CategoryConfiguration());
         modelBuilder.ApplyConfiguration(new ExpenseConfiguration());
         modelBuilder.ApplyConfiguration(new ApplicationUserRoleConfiguration());
+
+        // RefreshToken configuration: index on Token, UserId
+        modelBuilder.Entity<RefreshToken>(eb =>
+        {
+            eb.HasKey(r => r.Id);
+            eb.HasIndex(r => r.Token).IsUnique();
+            eb.Property(r => r.Token).IsRequired();
+            eb.Property(r => r.JwtId).IsRequired();
+            eb.Property(r => r.UserId).IsRequired();
+        });
+
+        modelBuilder.Entity<RevokedJwt>(eb =>
+        {
+            eb.HasKey(r => r.Jti);
+            eb.Property(r => r.RevokedAt).IsRequired();
+        });
     }
 
     public override int SaveChanges()
