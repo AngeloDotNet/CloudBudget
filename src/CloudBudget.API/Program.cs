@@ -2,10 +2,10 @@ using System.Text;
 using System.Text.Json.Serialization;
 using CloudBudget.API.BackgroundServices;
 using CloudBudget.API.Data;
+using CloudBudget.API.Data.Seed;
 using CloudBudget.API.Entities;
 using CloudBudget.API.Mapping;
 using CloudBudget.API.Middleware;
-using CloudBudget.API.Options;
 using CloudBudget.API.Repositories;
 using CloudBudget.API.Repositories.Interfaces;
 using CloudBudget.API.Services;
@@ -18,7 +18,6 @@ using CloudBudget.API.Settings;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
@@ -53,7 +52,6 @@ public class Program
                 Description = "JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\""
             };
             c.AddSecurityDefinition("Bearer", jwtScheme);
-
             c.AddSecurityRequirement(new OpenApiSecurityRequirement
             {
                 { jwtScheme, Array.Empty<string>() }
@@ -112,7 +110,19 @@ public class Program
             });
         });
 
-        builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>()
+        //builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>()
+        //    .AddEntityFrameworkStores<CloudBudgetDbContext>()
+        //    .AddDefaultTokenProviders();
+
+        builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
+        {
+            // Configurazione password di esempio (adatta in produzione)
+            options.Password.RequireDigit = true;
+            options.Password.RequireLowercase = true;
+            options.Password.RequireUppercase = true;
+            options.Password.RequireNonAlphanumeric = false;
+            options.Password.RequiredLength = 6;
+        })
             .AddEntityFrameworkStores<CloudBudgetDbContext>()
             .AddDefaultTokenProviders();
 
@@ -122,13 +132,38 @@ public class Program
         var jwtIssuer = jwtSection["Issuer"];
         var jwtAudience = jwtSection["Audience"];
 
-        if (string.IsNullOrEmpty(jwtKey))
-        {
-            // If no key provided, warn but continue; in production require a key.
-            builder.Logging.AddConsole();
-            builder.Services.AddSingleton<IValidateOptions<JwtBearerOptions>, NoOpValidateOptions>();
-        }
-        else
+        //if (string.IsNullOrEmpty(jwtKey))
+        //{
+        //    // If no key provided, warn but continue; in production require a key.
+        //    builder.Logging.AddConsole();
+        //    builder.Services.AddSingleton<IValidateOptions<JwtBearerOptions>, NoOpValidateOptions>();
+        //}
+        //else
+        //{
+        //    var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
+        //    builder.Services.AddAuthentication(options =>
+        //    {
+        //        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        //        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+        //    }).AddJwtBearer(options =>
+        //    {
+        //        options.RequireHttpsMetadata = true;
+        //        options.SaveToken = true;
+        //        options.TokenValidationParameters = new TokenValidationParameters
+        //        {
+        //            ValidateIssuerSigningKey = true,
+        //            IssuerSigningKey = key,
+        //            ValidateIssuer = !string.IsNullOrEmpty(jwtIssuer),
+        //            ValidIssuer = jwtIssuer,
+        //            ValidateAudience = !string.IsNullOrEmpty(jwtAudience),
+        //            ValidAudience = jwtAudience,
+        //            ValidateLifetime = true,
+        //            ClockSkew = TimeSpan.FromSeconds(30)
+        //        };
+        //    });
+        //}
+
+        if (!string.IsNullOrEmpty(jwtKey))
         {
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
             builder.Services.AddAuthentication(options =>
@@ -152,6 +187,10 @@ public class Program
                 };
             });
         }
+        else
+        {
+            builder.Services.AddAuthentication(); // fallback minimo
+        }
 
         builder.Services.AddAuthorization(options =>
         {
@@ -169,6 +208,27 @@ public class Program
 
         var app = builder.Build();
 
+        // Run seeder at startup (ensure DB updated)
+        using (var scope = app.Services.CreateScope())
+        {
+            var services = scope.ServiceProvider;
+            try
+            {
+                // apply pending migrations (opzionale)
+                var db = services.GetRequiredService<CloudBudgetDbContext>();
+                db.Database.Migrate();
+
+                var seeder = services.GetRequiredService<IdentitySeeder>();
+                await seeder.SeedAsync();
+            }
+            catch (Exception ex)
+            {
+                var logger = services.GetRequiredService<ILogger<Program>>();
+                logger.LogError(ex, "Errore durante lo startup seeding");
+                throw;
+            }
+        }
+
         app.UseHttpsRedirection();
         app.UseMiddleware<JwtRevocationMiddleware>();
 
@@ -185,10 +245,12 @@ public class Program
         }
 
         app.UseCors("DefaultCors");
-
         app.UseRouting();
-        app.MapControllers();
 
+        app.UseAuthentication();
+        app.UseAuthorization();
+
+        app.MapControllers();
         app.Run();
     }
 }
