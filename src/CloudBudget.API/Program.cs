@@ -41,7 +41,6 @@ public class Program
         {
             c.SwaggerDoc("v1", new OpenApiInfo { Title = "BudgetApp API", Version = "v1" });
 
-            // JWT bearer auth in Swagger
             var jwtScheme = new OpenApiSecurityScheme
             {
                 Name = "Authorization",
@@ -110,13 +109,8 @@ public class Program
             });
         });
 
-        //builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>()
-        //    .AddEntityFrameworkStores<CloudBudgetDbContext>()
-        //    .AddDefaultTokenProviders();
-
         builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
         {
-            // Configurazione password di esempio (adatta in produzione)
             options.Password.RequireDigit = true;
             options.Password.RequireLowercase = true;
             options.Password.RequireUppercase = true;
@@ -126,42 +120,10 @@ public class Program
             .AddEntityFrameworkStores<CloudBudgetDbContext>()
             .AddDefaultTokenProviders();
 
-        // Authentication: JWT Bearer
         var jwtSection = builder.Configuration.GetSection("Jwt");
         var jwtKey = jwtSection["Key"];
         var jwtIssuer = jwtSection["Issuer"];
         var jwtAudience = jwtSection["Audience"];
-
-        //if (string.IsNullOrEmpty(jwtKey))
-        //{
-        //    // If no key provided, warn but continue; in production require a key.
-        //    builder.Logging.AddConsole();
-        //    builder.Services.AddSingleton<IValidateOptions<JwtBearerOptions>, NoOpValidateOptions>();
-        //}
-        //else
-        //{
-        //    var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
-        //    builder.Services.AddAuthentication(options =>
-        //    {
-        //        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-        //        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-        //    }).AddJwtBearer(options =>
-        //    {
-        //        options.RequireHttpsMetadata = true;
-        //        options.SaveToken = true;
-        //        options.TokenValidationParameters = new TokenValidationParameters
-        //        {
-        //            ValidateIssuerSigningKey = true,
-        //            IssuerSigningKey = key,
-        //            ValidateIssuer = !string.IsNullOrEmpty(jwtIssuer),
-        //            ValidIssuer = jwtIssuer,
-        //            ValidateAudience = !string.IsNullOrEmpty(jwtAudience),
-        //            ValidAudience = jwtAudience,
-        //            ValidateLifetime = true,
-        //            ClockSkew = TimeSpan.FromSeconds(30)
-        //        };
-        //    });
-        //}
 
         if (!string.IsNullOrEmpty(jwtKey))
         {
@@ -194,10 +156,7 @@ public class Program
 
         builder.Services.AddAuthorization(options =>
         {
-            // Example: require role Admin
             options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
-
-            // Example: require a specific claim to send reports (you can adapt)
             options.AddPolicy("CanSendReports", policy => policy.RequireClaim("reports:send", "true"));
         });
 
@@ -239,7 +198,6 @@ public class Program
         }
         else
         {
-            // In production you might still enable swagger behind auth or IP whitelisting
             app.UseSwagger();
             app.UseSwaggerUI();
         }
