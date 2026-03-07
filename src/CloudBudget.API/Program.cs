@@ -171,11 +171,12 @@ public class Program
         using (var scope = app.Services.CreateScope())
         {
             var services = scope.ServiceProvider;
+
             try
             {
                 // apply pending migrations (opzionale)
                 var db = services.GetRequiredService<CloudBudgetDbContext>();
-                db.Database.Migrate();
+                await db.Database.MigrateAsync();
 
                 var seeder = services.GetRequiredService<IdentitySeeder>();
                 await seeder.SeedAsync();
@@ -189,7 +190,6 @@ public class Program
         }
 
         app.UseHttpsRedirection();
-        app.UseMiddleware<JwtRevocationMiddleware>();
 
         if (app.Environment.IsDevelopment())
         {
@@ -206,9 +206,11 @@ public class Program
         app.UseRouting();
 
         app.UseAuthentication();
-        app.UseAuthorization();
+        app.UseMiddleware<JwtRevocationMiddleware>(); // Jwt revocation middleware: verifica se il jti è presente nel revocation store
 
+        app.UseAuthorization();
         app.MapControllers();
-        app.Run();
+
+        await app.RunAsync();
     }
 }
