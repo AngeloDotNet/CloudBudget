@@ -30,9 +30,12 @@ public class CloudBudgetDbContext(DbContextOptions<CloudBudgetDbContext> options
         {
             eb.HasKey(r => r.Id);
             eb.HasIndex(r => r.Token).IsUnique();
+            eb.HasIndex(r => new { r.UserId, r.ClientId });
             eb.Property(r => r.Token).IsRequired();
             eb.Property(r => r.JwtId).IsRequired();
-            eb.Property(r => r.UserId).IsRequired();
+            eb.Property(r => r.ClientId).IsRequired().HasMaxLength(200);
+            eb.Property(r => r.IpAddress).HasMaxLength(45);
+            eb.Property(r => r.UserAgent).HasMaxLength(1000);
         });
 
         modelBuilder.Entity<RevokedJwt>(eb =>
