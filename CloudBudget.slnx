@@ -7,4 +7,5 @@
     <File Path="README.md" />
   </Folder>
   <Project Path="src/CloudBudget.API/CloudBudget.API.csproj" Id="92225fe7-b39a-44ba-aa8b-855740e7b2a4" />
+  <Project Path="src/CloudBudget.Tests/CloudBudget.Tests.csproj" Id="3f5baac6-1013-46b5-b9ec-1ea7b718d582" />
 </Solution>
