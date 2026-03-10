@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using CloudBudget.API.BackgroundServices;
 using CloudBudget.API.Data;
 using CloudBudget.API.Data.Seed;
@@ -15,9 +16,8 @@ using CloudBudget.API.Services.Interfaces;
 using CloudBudget.API.Services.ReportGenerators;
 using CloudBudget.API.Services.ReportGenerators.Interfaces;
 using CloudBudget.API.Settings;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
@@ -81,8 +81,19 @@ public class Program
         builder.Services.AddTransient<IJwtTokenService, JwtTokenService>();
         builder.Services.AddTransient<IRefreshTokenService, RefreshTokenService>();
 
+        //builder.Services.AddHttpClient<IGeoIpService, HttpGeoIpService>();
+        //builder.Services.AddTransient<IGeoIpService, NoOpGeoIpService>();
         builder.Services.AddHttpClient<IGeoIpService, HttpGeoIpService>();
-        builder.Services.AddTransient<IGeoIpService, NoOpGeoIpService>();
+        builder.Services.AddSingleton<IGeoIpService>(sp =>
+        {
+            var cfg = sp.GetRequiredService<IOptions<GeoIpSettings>>().Value;
+            if (string.IsNullOrEmpty(cfg.Provider) || cfg.Provider.Equals("none", StringComparison.OrdinalIgnoreCase))
+            {
+                return new NoOpGeoIpService();
+            }
+            // HttpGeoIpService will be resolved by DI via AddHttpClient above
+            return sp.GetRequiredService<IGeoIpService>();
+        });
 
         builder.Services.AddHostedService<CleanupService>();
         builder.Services.AddHostedService<MonthlyReportService>();
@@ -165,6 +176,33 @@ public class Program
         builder.Services.Configure<ReportSettings>(builder.Configuration.GetSection("Report"));
         builder.Services.Configure<SmtpSettings>(builder.Configuration.GetSection("Smtp"));
 
+        builder.Services.AddRateLimiter(options =>
+        {
+            options.GlobalLimiter = null;
+            options.RejectionStatusCode = 429;
+
+            options.AddPolicy("RefreshPolicy", context =>
+            {
+                // partition by clientId header or IP
+                var clientId = context.Request.Headers["X-Client-Id"].FirstOrDefault()
+                               ?? context.Request.Headers["clientid"].FirstOrDefault()
+                               ?? context.Request.Headers["ClientId"].FirstOrDefault()
+                               ?? context.Request.Headers["Client-Id"].FirstOrDefault()
+                               ?? context.Connection.RemoteIpAddress?.ToString()
+                               ?? "anon";
+
+                // Example Token Bucket: 5 requests per minute
+                return RateLimitPartition.GetTokenBucketLimiter(clientId, _ => new TokenBucketRateLimiterOptions
+                {
+                    TokenLimit = 5,
+                    TokensPerPeriod = 5,
+                    ReplenishmentPeriod = TimeSpan.FromMinutes(1),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0
+                });
+            });
+        });
+
         var app = builder.Build();
 
         // Run seeder at startup (ensure DB updated)
@@ -209,8 +247,9 @@ public class Program
         app.UseMiddleware<JwtRevocationMiddleware>(); // Jwt revocation middleware: verifica se il jti è presente nel revocation store
 
         app.UseAuthorization();
-        app.MapControllers();
+        app.UseRateLimiter();
 
+        app.MapControllers();
         await app.RunAsync();
     }
 }
