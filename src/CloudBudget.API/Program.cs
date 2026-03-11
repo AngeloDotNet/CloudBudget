@@ -16,8 +16,10 @@ using CloudBudget.API.Services.Interfaces;
 using CloudBudget.API.Services.ReportGenerators;
 using CloudBudget.API.Services.ReportGenerators.Interfaces;
 using CloudBudget.API.Settings;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.Extensions.Options;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
@@ -83,17 +85,18 @@ public class Program
 
         //builder.Services.AddHttpClient<IGeoIpService, HttpGeoIpService>();
         //builder.Services.AddTransient<IGeoIpService, NoOpGeoIpService>();
-        builder.Services.AddHttpClient<IGeoIpService, HttpGeoIpService>();
-        builder.Services.AddSingleton<IGeoIpService>(sp =>
-        {
-            var cfg = sp.GetRequiredService<IOptions<GeoIpSettings>>().Value;
-            if (string.IsNullOrEmpty(cfg.Provider) || cfg.Provider.Equals("none", StringComparison.OrdinalIgnoreCase))
-            {
-                return new NoOpGeoIpService();
-            }
-            // HttpGeoIpService will be resolved by DI via AddHttpClient above
-            return sp.GetRequiredService<IGeoIpService>();
-        });
+
+        //builder.Services.AddHttpClient<IGeoIpService, HttpGeoIpService>();
+        //builder.Services.AddSingleton<IGeoIpService>(sp =>
+        //{
+        //    var cfg = sp.GetRequiredService<IOptions<GeoIpSettings>>().Value;
+        //    if (string.IsNullOrEmpty(cfg.Provider) || cfg.Provider.Equals("none", StringComparison.OrdinalIgnoreCase))
+        //    {
+        //        return new NoOpGeoIpService();
+        //    }
+        //    // HttpGeoIpService will be resolved by DI via AddHttpClient above
+        //    return sp.GetRequiredService<IGeoIpService>();
+        //});
 
         builder.Services.AddHostedService<CleanupService>();
         builder.Services.AddHostedService<MonthlyReportService>();
@@ -176,22 +179,55 @@ public class Program
         builder.Services.Configure<ReportSettings>(builder.Configuration.GetSection("Report"));
         builder.Services.Configure<SmtpSettings>(builder.Configuration.GetSection("Smtp"));
 
+        var geoProvider = builder.Configuration.GetValue<string>("GeoIp:Provider");
+        if (!string.IsNullOrEmpty(geoProvider) && !geoProvider.Equals("none", StringComparison.OrdinalIgnoreCase))
+        {
+            // register Http client-based implementation
+            builder.Services.AddHttpClient<IGeoIpService, HttpGeoIpService>();
+        }
+        else
+        {
+            builder.Services.AddSingleton<IGeoIpService, NoOpGeoIpService>();
+        }
+
+        //builder.Services.AddRateLimiter(options =>
+        //{
+        //    options.GlobalLimiter = null;
+        //    options.RejectionStatusCode = 429;
+
+        //    options.AddPolicy("RefreshPolicy", context =>
+        //    {
+        //        // partition by clientId header or IP
+        //        var clientId = context.Request.Headers["X-Client-Id"].FirstOrDefault()
+        //                       ?? context.Request.Headers["clientid"].FirstOrDefault()
+        //                       ?? context.Request.Headers["ClientId"].FirstOrDefault()
+        //                       ?? context.Request.Headers["Client-Id"].FirstOrDefault()
+        //                       ?? context.Connection.RemoteIpAddress?.ToString()
+        //                       ?? "anon";
+
+        //        // Example Token Bucket: 5 requests per minute
+        //        return RateLimitPartition.GetTokenBucketLimiter(clientId, _ => new TokenBucketRateLimiterOptions
+        //        {
+        //            TokenLimit = 5,
+        //            TokensPerPeriod = 5,
+        //            ReplenishmentPeriod = TimeSpan.FromMinutes(1),
+        //            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+        //            QueueLimit = 0
+        //        });
+        //    });
+        //});
+
         builder.Services.AddRateLimiter(options =>
         {
-            options.GlobalLimiter = null;
             options.RejectionStatusCode = 429;
 
             options.AddPolicy("RefreshPolicy", context =>
             {
-                // partition by clientId header or IP
                 var clientId = context.Request.Headers["X-Client-Id"].FirstOrDefault()
-                               ?? context.Request.Headers["clientid"].FirstOrDefault()
-                               ?? context.Request.Headers["ClientId"].FirstOrDefault()
-                               ?? context.Request.Headers["Client-Id"].FirstOrDefault()
-                               ?? context.Connection.RemoteIpAddress?.ToString()
-                               ?? "anon";
+                    ?? context.Request.Headers["clientid"].FirstOrDefault()
+                    ?? context.Request.Headers["ClientId"].FirstOrDefault()
+                    ?? context.Connection.RemoteIpAddress?.ToString() ?? "anon";
 
-                // Example Token Bucket: 5 requests per minute
                 return RateLimitPartition.GetTokenBucketLimiter(clientId, _ => new TokenBucketRateLimiterOptions
                 {
                     TokenLimit = 5,
@@ -203,18 +239,30 @@ public class Program
             });
         });
 
+        // Forwarded headers (useful behind nginx)
+        builder.Services.Configure<ForwardedHeadersOptions>(options =>
+        {
+            options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+            // In production, set KnownNetworks or KnownProxies for security
+            options.KnownNetworks.Clear();
+            options.KnownProxies.Clear();
+        });
+
+        builder.Services.AddTransient<IdentitySeeder>();
+
         var app = builder.Build();
 
-        // Run seeder at startup (ensure DB updated)
+        app.UseForwardedHeaders();
+        app.UseHttpsRedirection();
+
+        // Apply migrations and seed Identity on startup
         using (var scope = app.Services.CreateScope())
         {
             var services = scope.ServiceProvider;
-
             try
             {
-                // apply pending migrations (opzionale)
                 var db = services.GetRequiredService<CloudBudgetDbContext>();
-                await db.Database.MigrateAsync();
+                db.Database.Migrate();
 
                 var seeder = services.GetRequiredService<IdentitySeeder>();
                 await seeder.SeedAsync();
@@ -226,8 +274,6 @@ public class Program
                 throw;
             }
         }
-
-        app.UseHttpsRedirection();
 
         if (app.Environment.IsDevelopment())
         {
@@ -241,15 +287,17 @@ public class Program
         }
 
         app.UseCors("DefaultCors");
-        app.UseRouting();
-
-        app.UseAuthentication();
-        app.UseMiddleware<JwtRevocationMiddleware>(); // Jwt revocation middleware: verifica se il jti è presente nel revocation store
-
-        app.UseAuthorization();
         app.UseRateLimiter();
 
+        app.UseRouting();
+        app.UseAuthentication();
+
+        app.UseMiddleware<JwtRevocationMiddleware>(); // Jwt revocation middleware: verifica se il jti è presente nel revocation store
+        app.UseAuthorization();
+
+        app.UseRateLimiter();
         app.MapControllers();
+
         await app.RunAsync();
     }
 }
