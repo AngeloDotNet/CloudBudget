@@ -83,21 +83,6 @@ public class Program
         builder.Services.AddTransient<IJwtTokenService, JwtTokenService>();
         builder.Services.AddTransient<IRefreshTokenService, RefreshTokenService>();
 
-        //builder.Services.AddHttpClient<IGeoIpService, HttpGeoIpService>();
-        //builder.Services.AddTransient<IGeoIpService, NoOpGeoIpService>();
-
-        //builder.Services.AddHttpClient<IGeoIpService, HttpGeoIpService>();
-        //builder.Services.AddSingleton<IGeoIpService>(sp =>
-        //{
-        //    var cfg = sp.GetRequiredService<IOptions<GeoIpSettings>>().Value;
-        //    if (string.IsNullOrEmpty(cfg.Provider) || cfg.Provider.Equals("none", StringComparison.OrdinalIgnoreCase))
-        //    {
-        //        return new NoOpGeoIpService();
-        //    }
-        //    // HttpGeoIpService will be resolved by DI via AddHttpClient above
-        //    return sp.GetRequiredService<IGeoIpService>();
-        //});
-
         builder.Services.AddHostedService<CleanupService>();
         builder.Services.AddHostedService<MonthlyReportService>();
 
@@ -190,33 +175,6 @@ public class Program
             builder.Services.AddSingleton<IGeoIpService, NoOpGeoIpService>();
         }
 
-        //builder.Services.AddRateLimiter(options =>
-        //{
-        //    options.GlobalLimiter = null;
-        //    options.RejectionStatusCode = 429;
-
-        //    options.AddPolicy("RefreshPolicy", context =>
-        //    {
-        //        // partition by clientId header or IP
-        //        var clientId = context.Request.Headers["X-Client-Id"].FirstOrDefault()
-        //                       ?? context.Request.Headers["clientid"].FirstOrDefault()
-        //                       ?? context.Request.Headers["ClientId"].FirstOrDefault()
-        //                       ?? context.Request.Headers["Client-Id"].FirstOrDefault()
-        //                       ?? context.Connection.RemoteIpAddress?.ToString()
-        //                       ?? "anon";
-
-        //        // Example Token Bucket: 5 requests per minute
-        //        return RateLimitPartition.GetTokenBucketLimiter(clientId, _ => new TokenBucketRateLimiterOptions
-        //        {
-        //            TokenLimit = 5,
-        //            TokensPerPeriod = 5,
-        //            ReplenishmentPeriod = TimeSpan.FromMinutes(1),
-        //            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-        //            QueueLimit = 0
-        //        });
-        //    });
-        //});
-
         builder.Services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = 429;
@@ -243,6 +201,7 @@ public class Program
         builder.Services.Configure<ForwardedHeadersOptions>(options =>
         {
             options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+
             // In production, set KnownNetworks or KnownProxies for security
             options.KnownNetworks.Clear();
             options.KnownProxies.Clear();
@@ -262,7 +221,7 @@ public class Program
             try
             {
                 var db = services.GetRequiredService<CloudBudgetDbContext>();
-                db.Database.Migrate();
+                await db.Database.MigrateAsync();
 
                 var seeder = services.GetRequiredService<IdentitySeeder>();
                 await seeder.SeedAsync();
