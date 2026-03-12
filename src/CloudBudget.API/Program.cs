@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
@@ -167,7 +168,6 @@ public class Program
         var geoProvider = builder.Configuration.GetValue<string>("GeoIp:Provider");
         if (!string.IsNullOrEmpty(geoProvider) && !geoProvider.Equals("none", StringComparison.OrdinalIgnoreCase))
         {
-            // register Http client-based implementation
             builder.Services.AddHttpClient<IGeoIpService, HttpGeoIpService>();
         }
         else
@@ -197,14 +197,43 @@ public class Program
             });
         });
 
-        // Forwarded headers (useful behind nginx)
+        //// Forwarded headers (useful behind nginx)
+        //builder.Services.Configure<ForwardedHeadersOptions>(options =>
+        //{
+        //    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+
+        //    // In production, set KnownNetworks or KnownProxies for security
+        //    options.KnownNetworks.Clear();
+        //    options.KnownProxies.Clear();
+        //});
+
+        var knownProxiesConfig = builder.Configuration.GetSection("Proxy:KnownProxies").Get<string[]>();
+
         builder.Services.Configure<ForwardedHeadersOptions>(options =>
         {
             options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
 
-            // In production, set KnownNetworks or KnownProxies for security
+            // Clear defaults and add configured known proxies (if any)
             options.KnownNetworks.Clear();
             options.KnownProxies.Clear();
+
+            if (knownProxiesConfig != null)
+            {
+                var tempServiceProvider = builder.Services.BuildServiceProvider();
+                var logger = tempServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("ForwardedHeadersConfig");
+
+                foreach (var ipString in knownProxiesConfig)
+                {
+                    if (IPAddress.TryParse(ipString, out var ip))
+                    {
+                        options.KnownProxies.Add(ip);
+                    }
+                    else
+                    {
+                        logger.LogWarning("Proxy:KnownProxies contains invalid IP: {Ip}", ipString);
+                    }
+                }
+            }
         });
 
         builder.Services.AddTransient<IdentitySeeder>();
