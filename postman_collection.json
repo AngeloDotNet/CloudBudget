@@ -1,0 +1,157 @@
+{
+  "info": {
+    "name": "BudgetApp Auth Flow",
+    "_postman_id": "budgetapp-auth-sample",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Login (get JWT + refresh)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"Admin123!\",\n  \"clientId\": \"{{clientId}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["api","auth","login"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Use token (example protected endpoint)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/categories",
+          "host": ["{{baseUrl}}"],
+          "path": ["api","categories"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Refresh token",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\",\n  \"clientId\": \"{{clientId}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/refresh",
+          "host": ["{{baseUrl}}"],
+          "path": ["api","auth","refresh"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Logout (revoke all for user)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/logout",
+          "host": ["{{baseUrl}}"],
+          "path": ["api","auth","logout"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "List my refresh tokens",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/refreshtokens/me",
+          "host": ["{{baseUrl}}"],
+          "path": ["api","refreshtokens","me"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Admin revoke token",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminAccessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/refreshtokens/revoke?token={{tokenToRevoke}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api","refreshtokens","revoke"],
+          "query": [
+            {
+              "key": "token",
+              "value": "{{tokenToRevoke}}"
+            }
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://localhost:5001"
+    },
+    {
+      "key": "clientId",
+      "value": "client-12345"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "refreshToken",
+      "value": ""
+    },
+    {
+      "key": "adminAccessToken",
+      "value": ""
+    },
+    {
+      "key": "tokenToRevoke",
+      "value": ""
+    }
+  ]
+}
