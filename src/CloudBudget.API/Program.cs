@@ -117,8 +117,8 @@ public class Program
             options.Password.RequireNonAlphanumeric = false;
             options.Password.RequiredLength = 6;
         })
-            .AddEntityFrameworkStores<CloudBudgetDbContext>()
-            .AddDefaultTokenProviders();
+        .AddEntityFrameworkStores<CloudBudgetDbContext>()
+        .AddDefaultTokenProviders();
 
         var jwtSection = builder.Configuration.GetSection("Jwt");
         var jwtKey = jwtSection["Key"];
@@ -178,7 +178,6 @@ public class Program
         builder.Services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = 429;
-
             options.AddPolicy("RefreshPolicy", context =>
             {
                 var clientId = context.Request.Headers["X-Client-Id"].FirstOrDefault()
@@ -197,23 +196,13 @@ public class Program
             });
         });
 
-        //// Forwarded headers (useful behind nginx)
-        //builder.Services.Configure<ForwardedHeadersOptions>(options =>
-        //{
-        //    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-
-        //    // In production, set KnownNetworks or KnownProxies for security
-        //    options.KnownNetworks.Clear();
-        //    options.KnownProxies.Clear();
-        //});
-
         var knownProxiesConfig = builder.Configuration.GetSection("Proxy:KnownProxies").Get<string[]>();
+        var knownNetworksConfig = builder.Configuration.GetSection("Proxy:KnownNetworks").Get<string[]>();
 
         builder.Services.Configure<ForwardedHeadersOptions>(options =>
         {
             options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
 
-            // Clear defaults and add configured known proxies (if any)
             options.KnownNetworks.Clear();
             options.KnownProxies.Clear();
 
@@ -231,6 +220,25 @@ public class Program
                     else
                     {
                         logger.LogWarning("Proxy:KnownProxies contains invalid IP: {Ip}", ipString);
+                    }
+                }
+            }
+
+            if (knownNetworksConfig != null)
+            {
+                var tempServiceProvider = builder.Services.BuildServiceProvider();
+                var logger = tempServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("ForwardedHeadersConfig");
+
+                foreach (var cidr in knownNetworksConfig)
+                {
+                    // Use IPNetwork.TryParse which is from Microsoft.AspNetCore.HttpOverrides
+                    if (Microsoft.AspNetCore.HttpOverrides.IPNetwork.TryParse(cidr, out var network) && network != null)
+                    {
+                        options.KnownNetworks.Add(network);
+                    }
+                    else
+                    {
+                        logger.LogWarning("Proxy:KnownNetworks contains invalid CIDR: {Cidr}", cidr);
                     }
                 }
             }
